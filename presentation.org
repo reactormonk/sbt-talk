@@ -1,0 +1,162 @@
+* What is SBT?
+** What is SBT?
+** What is SBT really?
+A dependency tree of named, scoped tasks.
+* A dependency tree of scoped *tasks*.
+** A dependency tree of scoped *tasks*.
+A task is something that returns a value of type T.
+
+- SettingKey[T]
+- TaskKey[T]
+- InputKey[T]
+** SettingKey
+- const
+- e.g. scalaVersion
+** TaskKey
+- result of code
+- e.g. compile
+** InputKey
+- reading input
+- e.g. console
+* A dependency tree of *scoped* tasks.
+** A dependency tree of *scoped* tasks.
+- name
+- project
+- configuration
+- task
+** Scoped by name
+#+BEGIN_SRC scala
+  lazy val key = settingKey[String]("Some random key.")
+#+END_SRC
+#+BEGIN_SRC
+  key
+#+END_SRC
+** Scoped by project
+Subprojects
+#+BEGIN_SRC scala
+  lazy val sub = (project in file("sub/"))
+#+END_SRC
+#+BEGIN_SRC
+  sub/key
+#+END_SRC
+** Scoped by Configuration
+- Compile
+- Test
+- Runtime
+#+BEGIN_SRC
+compile:key
+#+END_SRC
+** Scoped by Task
+Any Task
+#+BEGIN_SRC 
+compile::key
+#+END_SRC
+** Generally, scope with `in`
+#+BEGIN_SRC scala
+key in subproject
+key in (subproject, Compile)
+#+END_SRC
+* A *dependency tree* of scoped tasks. 
+** A *dependency tree* of scoped tasks. 
+#+BEGIN_SRC 
+> inspect name
+[info] Setting: java.lang.String = Counter
+[info] Description:
+[info]  Project name.
+[info] Provided by:
+[info]  {file:/home/tass/dev/talk/sbt/}sbt/*:name
+[info] Defined at:
+[info]  /home/tass/dev/talk/sbt/build.sbt:1
+[info] Reverse dependencies:
+[info]  sbt/*:normalizedName
+[info]  sbt/*:projectInfo
+[info]  sbt/*:description
+[info]  sbt/*:onLoadMessage
+[info] Delegates:
+[info]  sbt/*:name
+[info]  {.}/*:name
+[info]  */*:name
+#+END_SRC
+* Define your own Task
+** Define your own Setting
+- name
+- type
+- value
+- scope
+** Name and Type
+#+BEGIN_SRC scala
+  lazy val key = settingKey[String]("Some random key.")
+#+END_SRC
+** Value and Scope
+#+BEGIN_SRC scala
+  key in Compile := "Foo"
+#+END_SRC
+** Define your own Task
+#+BEGIN_SRC scala
+  lazy val task = taskKey[File]("Some random task.")
+#+END_SRC
+#+BEGIN_SRC scala
+  task := Def.task {
+    val s = key.value
+    // Some work, possibly with sideeffects
+    s
+  }
+#+END_SRC
+
+* Add an hdfs configuration
+** Keys for configuration
+#+BEGIN_SRC scala
+val namenode = settingKey[String]("hdfs namenode")
+#+END_SRC
+** Values for the keys
+#+BEGIN_SRC scala
+  namenode := "172.10.10.1"
+#+END_SRC
+** Tasks
+#+BEGIN_SRC scala
+  val hdfsTask = Def.task {
+    val files = ((baseDirectory.value / "project" / "templates" / "resources" / "hdfs" ) * "*.xml").get
+    files.map({ hdfsTemplate =>
+      val config = IO.read(hdfsTemplate).replace("{{namenode}}", namenode.value)
+      val outputPath = resourceManaged.value / hdfsTemplate.getName
+      IO.write(outputPath, config)
+      outputPath
+    })
+  }
+#+END_SRC
+** Add the task to resourceGemerators
+#+BEGIN_SRC scala
+  resourceGenerators += hdfsTask.taskValue
+#+END_SRC
+* Deployment via task
+** Keys for configuration
+#+BEGIN_SRC scala
+  val deployLocation = taskKey[String]("Host for deployment")
+  val deployHost = taskKey[String]("Target file for deployment")
+  val deploy = taskKey[Unit]("Deploy the packaged jar to the cluster")
+#+END_SRC
+** Values for the keys
+#+BEGIN_SRC scala
+  deployLocation in Compile := "/var/lib/server/server.jar"
+  deployHost in Compile := "root@foo.com"
+#+END_SRC
+** Tasks
+#+BEGIN_SRC scala
+    deploy in Compile := {
+      val s: TaskStreams = streams.value
+      val account = deployLocation in Compile).value
+      val target_abs = s"$account:${(deployLocation in Compile).value}"
+      val keyfile = sys.env("CLUSTER_SSH_KEY")
+
+      val src = (packageBin in Compile).value.getAbsolutePath
+      s.log.info("Copying " + src + " to " + target_abs)
+      Process(Seq("scp", "-i", keyfile, src, target_abs)) ! s.log
+  }
+#+END_SRC
+* Task Scope
+** Task Scope - Story Time
+** Task Scope
+#+BEGIN_SRC scala
+  name := "ultra"
+  name in deploy := "sane"
+#+END_SRC
